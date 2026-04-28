@@ -1,0 +1,319 @@
+@import url('https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700&display=swap');
+
+:root {
+  /* Core Dark Mode Colors */
+  --bg-primary: #020617; /* Very dark slate */
+  --surface-glass: rgba(15, 23, 42, 0.6); /* Slate glass */
+  --surface-solid: #0f172a;
+  --text-main: #f8fafc;
+  --text-muted: #94a3b8;
+  
+  /* Glowing Accents */
+  --accent-blue: #38bdf8;
+  --accent-blue-hover: #7dd3fc;
+  --border-subtle: rgba(148, 163, 184, 0.1);
+  --border-glow: rgba(56, 189, 248, 0.3);
+  
+  /* Status Colors */
+  --status-severe-red: #ef4444;
+  --status-severe-bg: rgba(239, 68, 68, 0.15);
+  --status-mod-amber: #f59e0b;
+  --status-mod-bg: rgba(245, 158, 11, 0.15);
+  --status-safe-green: #10b981;
+  --status-safe-bg: rgba(16, 185, 129, 0.15);
+  
+  /* Effects */
+  --shadow-soft: 0 8px 32px 0 rgba(0, 0, 0, 0.3);
+  --shadow-hover: 0 12px 40px 0 rgba(56, 189, 248, 0.15);
+  --border-radius: 20px;
+  --transition-smooth: all 0.4s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+* {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+body {
+  font-family: 'Outfit', sans-serif;
+  background-color: var(--bg-primary);
+  color: var(--text-main);
+  min-height: 100vh;
+  margin: 0;
+  
+  /* Deep vibrant background mesh gradient */
+  background-image: 
+    radial-gradient(circle at 15% 50%, rgba(14, 165, 233, 0.15) 0px, transparent 50%),
+    radial-gradient(circle at 85% 30%, rgba(139, 92, 246, 0.15) 0px, transparent 50%),
+    radial-gradient(circle at 50% 100%, rgba(2, 6, 23, 1) 0px, transparent 50%);
+  background-attachment: fixed;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  overflow-x: hidden;
+}
+
+.app-container {
+  width: 95vw;
+  max-width: 1800px;
+  height: 90vh;
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 2rem;
+}
+
+@media (min-width: 968px) {
+  .app-container {
+    grid-template-columns: 450px 1fr;
+  }
+}
+
+/* Glass Panels */
+.glass-panel {
+  background: var(--surface-glass);
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--border-radius);
+  padding: 2.5rem;
+  box-shadow: var(--shadow-soft);
+  transition: var(--transition-smooth);
+  display: flex;
+  flex-direction: column;
+  overflow-y: auto;
+}
+
+/* Custom Scrollbar for panels */
+.glass-panel::-webkit-scrollbar {
+  width: 8px;
+}
+.glass-panel::-webkit-scrollbar-track {
+  background: transparent;
+}
+.glass-panel::-webkit-scrollbar-thumb {
+  background: rgba(148, 163, 184, 0.2);
+  border-radius: 10px;
+}
+.glass-panel::-webkit-scrollbar-thumb:hover {
+  background: rgba(148, 163, 184, 0.4);
+}
+
+.glass-panel:hover {
+  border-color: var(--border-glow);
+  box-shadow: var(--shadow-hover);
+}
+
+/* Typography */
+h1 {
+  font-size: 2.5rem;
+  font-weight: 700;
+  margin-bottom: 0.5rem;
+  letter-spacing: -0.03em;
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  background: linear-gradient(135deg, #f8fafc 0%, #94a3b8 100%);
+  -webkit-background-clip: text;
+  background-clip: text;
+  -webkit-text-fill-color: transparent;
+}
+
+h2 {
+  font-size: 1.4rem;
+  font-weight: 600;
+  margin-bottom: 1.5rem;
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  color: #e2e8f0;
+}
+
+p.subtitle {
+  color: var(--text-muted);
+  font-size: 1.05rem;
+  margin-bottom: 2.5rem;
+  font-weight: 300;
+}
+
+/* Interactive Elements */
+input.search-input {
+  width: 100%;
+  padding: 1.25rem 1.5rem;
+  font-size: 1.1rem;
+  border: 1px solid var(--border-subtle);
+  border-radius: 16px;
+  background: rgba(15, 23, 42, 0.8);
+  color: var(--text-main);
+  transition: var(--transition-smooth);
+  box-shadow: inset 0 2px 4px rgba(0,0,0,0.2);
+  outline: none;
+  font-family: inherit;
+}
+
+input.search-input::placeholder {
+  color: #64748b;
+}
+
+input.search-input:focus {
+  border-color: var(--accent-blue);
+  box-shadow: 0 0 0 4px rgba(56, 189, 248, 0.1), inset 0 2px 4px rgba(0,0,0,0.2);
+}
+
+.search-results {
+  margin-top: 1rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+  max-height: 250px;
+  overflow-y: auto;
+  padding-right: 0.5rem;
+}
+.search-results::-webkit-scrollbar { width: 6px; }
+.search-results::-webkit-scrollbar-thumb { background: rgba(148, 163, 184, 0.2); border-radius: 10px; }
+
+.drug-pill-add {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 1rem 1.25rem;
+  background: rgba(30, 41, 59, 0.5);
+  border: 1px solid var(--border-subtle);
+  border-radius: 12px;
+  cursor: pointer;
+  transition: var(--transition-smooth);
+}
+
+.drug-pill-add:hover {
+  border-color: var(--accent-blue);
+  background: rgba(30, 41, 59, 0.8);
+  transform: translateY(-2px);
+}
+.drug-pill-add .pill-text { font-weight: 500; font-size: 1.1rem;}
+.drug-pill-add .pill-sub { font-size: 0.85rem; color: var(--text-muted); margin-top: 0.2rem; }
+
+
+/* Prescriptions List Box */
+.cart-list {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+  margin-top: 2rem;
+  flex: 1;
+}
+
+.cart-item {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 1.25rem;
+  background: rgba(15, 23, 42, 0.7);
+  border: 1px solid var(--border-subtle);
+  border-left: 4px solid var(--accent-blue);
+  border-radius: 14px;
+  animation: slideIn 0.4s cubic-bezier(0.16, 1, 0.3, 1);
+  box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
+}
+
+.cart-item button {
+  background: transparent;
+  border: none;
+  color: var(--text-muted);
+  cursor: pointer;
+  transition: var(--transition-smooth);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0.5rem;
+  border-radius: 50%;
+}
+.cart-item button:hover {
+  color: var(--status-severe-red);
+  background: rgba(239, 68, 68, 0.1);
+}
+
+/* Matrix Matrix */
+.matrix-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
+  gap: 1.5rem;
+}
+
+.interaction-card {
+  padding: 1.5rem;
+  border-radius: 16px;
+  background: rgba(30, 41, 59, 0.4);
+  border: 1px solid var(--border-subtle);
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+  transition: var(--transition-smooth);
+  position: relative;
+  overflow: hidden;
+}
+
+.interaction-card::before {
+  content: '';
+  position: absolute;
+  top: 0; left: 0; right: 0; height: 3px;
+  background: var(--text-muted);
+  opacity: 0.5;
+}
+.interaction-card:has(.tag-Contraindicated)::before { background: var(--status-severe-red); opacity: 1; }
+.interaction-card:has(.tag-Severe)::before { background: #f87171; opacity: 1;}
+.interaction-card:has(.tag-Moderate)::before { background: var(--status-mod-amber); opacity: 1;}
+
+
+.interaction-card:hover { 
+  transform: translateY(-5px); 
+  border-color: rgba(148, 163, 184, 0.3);
+  box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.3);
+}
+
+/* The Safety Shield Shielding */
+.shield-active {
+  animation: pulse-red 3s infinite;
+  border-color: rgba(239, 68, 68, 0.4);
+}
+
+.banner {
+  padding: 1.25rem 1.5rem;
+  border-radius: 16px;
+  margin-bottom: 2.5rem;
+  display: flex;
+  align-items: center;
+  gap: 1.25rem;
+  font-weight: 500;
+  box-shadow: 0 4px 15px rgba(0,0,0,0.1);
+}
+.banner.safe { background: var(--status-safe-bg); color: #34d399; border: 1px solid rgba(16, 185, 129, 0.3); }
+.banner.alert { background: var(--status-severe-bg); color: #fca5a5; border: 1px solid rgba(239, 68, 68, 0.3); }
+.banner.caution { background: var(--status-mod-bg); color: #fcd34d; border: 1px solid rgba(245, 158, 11, 0.3); }
+
+/* Tags */
+.severity-tag {
+  padding: 0.35rem 1rem;
+  border-radius: 20px;
+  font-size: 0.8rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  display: inline-block;
+}
+.tag-Contraindicated { background: var(--status-severe-red); color: white; box-shadow: 0 0 10px rgba(239, 68, 68, 0.4);}
+.tag-Severe { background: #f87171; color: white; }
+.tag-Moderate { background: var(--status-mod-amber); color: #1e293b; box-shadow: 0 0 10px rgba(245, 158, 11, 0.2); }
+.tag-Mild { background: #fde047; color: #1e293b; }
+
+
+/* Animations */
+@keyframes slideIn {
+  from { opacity: 0; transform: translateX(-20px) scale(0.98); }
+  to { opacity: 1; transform: translateX(0) scale(1); }
+}
+
+@keyframes pulse-red {
+  0% { box-shadow: 0 0 0 0 rgba(239, 68, 68, 0.2); }
+  70% { box-shadow: 0 0 0 20px rgba(239, 68, 68, 0); }
+  100% { box-shadow: 0 0 0 0 rgba(239, 68, 68, 0); }
+}
