@@ -1,12 +1,15 @@
 import os
 import sys
+from dotenv import load_dotenv
+
+load_dotenv()
 
 # Ensure we can import app modules
 sys.path.append(os.path.dirname(os.path.abspath(__file__)))
 
 from sqlalchemy.orm import Session
 from app.database import SessionLocal, engine
-from app.models import Base, Drug, DrugClass, DrugInteraction, ClassInteraction, SeverityLevel
+from app.models import Base, Medication, DrugClass, DrugInteraction, ClassInteraction, SeverityLevel
 
 def seed_database():
     print("Ensuring tables exist (NOT dropping data)...")
@@ -313,14 +316,13 @@ def seed_database():
             {"brand_name": "Minocin", "generic_name": "Minocycline", "class_name": "Tetracycline Antibiotic"},
             {"brand_name": "Sumycin", "generic_name": "Tetracycline", "class_name": "Tetracycline Antibiotic"},
 
-            # Sulfonamides
             {"brand_name": "Bactrim", "generic_name": "Trimethoprim/Sulfamethoxazole", "class_name": "Sulfonamide"},
             {"brand_name": "Septra", "generic_name": "Sulfamethoxazole/Trimethoprim", "class_name": "Sulfonamide"},
             {"brand_name": "Gantrisin", "generic_name": "Sulfisoxazole", "class_name": "Sulfonamide"}
         ]
         
         # Deduplicate generic entries for interactions
-        drug_objects = {}
+        medication_objects = {}
         for d_data in drugs_data:
             class_obj = class_objects.get(d_data['class_name'])
             
@@ -329,15 +331,15 @@ def seed_database():
             class_desc = f" Primary action: {class_obj.description}." if class_obj else ""
             full_description = base_desc + class_desc
             
-            d = Drug(
+            m = Medication(
                 brand_name=d_data['brand_name'],
                 generic_name=d_data['generic_name'],
                 drug_class_id=class_obj.class_id if class_obj else None,
                 description=full_description
             )
-            db.add(d)
-            if d_data['generic_name'] not in drug_objects:
-                drug_objects[d_data['generic_name']] = d
+            db.add(m)
+            if d_data['generic_name'] not in medication_objects:
+                medication_objects[d_data['generic_name']] = m
             
         db.commit()
 
@@ -630,10 +632,10 @@ def seed_database():
         ]
         
         for si_data in specific_interactions_data:
-            if si_data['drug1'] in drug_objects and si_data['drug2'] in drug_objects:
-                d1 = drug_objects[si_data['drug1']]
-                d2 = drug_objects[si_data['drug2']]
-                id1, id2 = sorted([d1.drug_id, d2.drug_id])
+            if si_data['drug1'] in medication_objects and si_data['drug2'] in medication_objects:
+                d1 = medication_objects[si_data['drug1']]
+                d2 = medication_objects[si_data['drug2']]
+                id1, id2 = sorted([d1.medication_id, d2.medication_id])
                 
                 si = DrugInteraction(
                     drug1_id=id1,
@@ -655,8 +657,10 @@ def seed_database():
             print(f"Extracted {len(extracted)} severe interactions from OpenFDA unstructured data!")
             
             for interact in extracted:
-                d1_name = interact.get('drug1')
-                d2_name = interact.get('drug2')
+                d1_brand = interact.get('drug1_brand', 'Unknown')
+                d1_generic = interact.get('drug1_generic', d1_brand)
+                d2_brand = interact.get('drug2_brand', 'Unknown')
+                d2_generic = interact.get('drug2_generic', d2_brand)
                 sev_str = interact.get('severity', 'Moderate')
                 desc = interact.get('description', '')
                 
@@ -667,22 +671,22 @@ def seed_database():
                     sev = SeverityLevel.Moderate
                 
                 # Create the drugs if they don't exist
-                if d1_name not in drug_objects:
-                    d1 = Drug(brand_name=d1_name, generic_name=d1_name, description="Dynamically extracted via AI from FDA")
+                if d1_generic not in medication_objects:
+                    d1 = Medication(brand_name=d1_brand, generic_name=d1_generic, description="Dynamically extracted via AI from FDA")
                     db.add(d1)
                     db.flush()
-                    drug_objects[d1_name] = d1
+                    medication_objects[d1_generic] = d1
                     
-                if d2_name not in drug_objects:
-                    d2 = Drug(brand_name=d2_name, generic_name=d2_name, description="Dynamically extracted via AI from FDA")
+                if d2_generic not in medication_objects:
+                    d2 = Medication(brand_name=d2_brand, generic_name=d2_generic, description="Dynamically extracted via AI from FDA")
                     db.add(d2)
                     db.flush()
-                    drug_objects[d2_name] = d2
+                    medication_objects[d2_generic] = d2
                 
                 # Add interaction
                 si = DrugInteraction(
-                    drug1_id=drug_objects[d1_name].drug_id,
-                    drug2_id=drug_objects[d2_name].drug_id,
+                    drug1_id=medication_objects[d1_generic].medication_id,
+                    drug2_id=medication_objects[d2_generic].medication_id,
                     severity=sev,
                     description=f"[AI EXTRACTED]: {desc}"
                 )

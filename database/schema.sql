@@ -1,61 +1,82 @@
--- DrugInteraction Vault DDL
--- Phase 1 Schema
+CREATE TYPE severitylevel AS ENUM ('Mild', 'Moderate', 'Severe', 'Contraindicated');
 
--- 1. Create Severity Level ENUM
-CREATE TYPE severity_level AS ENUM ('Mild', 'Moderate', 'Severe', 'Contraindicated');
-
--- 2. Drug Classes Table
-CREATE TABLE drug_classes (
-    class_id SERIAL PRIMARY KEY,
-    class_name VARCHAR(255) UNIQUE NOT NULL,
-    description TEXT
-);
-
--- 3. Drugs Table (Requires pg_trgm installed for indexing)
--- Note: Assuming pg_trgm extension is created on the DB before running this:
--- CREATE EXTENSION IF NOT EXISTS pg_trgm;
-CREATE TABLE drugs (
-    drug_id SERIAL PRIMARY KEY,
-    brand_name VARCHAR(255) NOT NULL,
-    generic_name VARCHAR(255) NOT NULL,
-    drug_class_id INT REFERENCES drug_classes(class_id) ON DELETE SET NULL,
-    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
-);
-
--- GIN Indexes for fuzzy search
-CREATE INDEX idx_drugs_brand_name ON drugs USING gin (brand_name gin_trgm_ops);
-CREATE INDEX idx_drugs_generic_name ON drugs USING gin (generic_name gin_trgm_ops);
-
--- 4. Drug-to-Drug Interactions Table
-CREATE TABLE drug_interactions (
-    interaction_id SERIAL PRIMARY KEY,
-    drug1_id INT NOT NULL REFERENCES drugs(drug_id) ON DELETE CASCADE,
-    drug2_id INT NOT NULL REFERENCES drugs(drug_id) ON DELETE CASCADE,
-    severity severity_level NOT NULL,
-    description TEXT,
-    evidence_url TEXT,
-    CONSTRAINT chk_drug_order CHECK (drug1_id < drug2_id),
-    UNIQUE (drug1_id, drug2_id)
-);
-
--- 5. Class-to-Class Interactions Table
-CREATE TABLE class_interactions (
-    interaction_id SERIAL PRIMARY KEY,
-    class1_id INT NOT NULL REFERENCES drug_classes(class_id) ON DELETE CASCADE,
-    class2_id INT NOT NULL REFERENCES drug_classes(class_id) ON DELETE CASCADE,
-    severity severity_level NOT NULL,
-    description TEXT,
-    CONSTRAINT chk_class_order CHECK (class1_id < class2_id),
-    UNIQUE (class1_id, class2_id)
-);
-
--- 6. Audit Logs Table (For medical accountability)
 CREATE TABLE audit_logs (
-    log_id SERIAL PRIMARY KEY,
-    timestamp TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
-    drugs_checked INT[] NOT NULL,
-    interactions_found INT DEFAULT 0,
-    highest_severity severity_level,
-    action_taken VARCHAR(50),
-    user_id INT 
+	log_id SERIAL NOT NULL, 
+	timestamp TIMESTAMP WITH TIME ZONE, 
+	drugs_checked INTEGER[] NOT NULL, 
+	interactions_found INTEGER, 
+	highest_severity severitylevel, 
+	action_taken VARCHAR(50), 
+	override_reason TEXT, 
+	user_id INTEGER, 
+	PRIMARY KEY (log_id)
 );
+
+CREATE TABLE drug_classes (
+	class_id SERIAL NOT NULL, 
+	class_name VARCHAR(255) NOT NULL, 
+	description TEXT, 
+	PRIMARY KEY (class_id), 
+	UNIQUE (class_name)
+);
+
+CREATE TABLE patients (
+	patient_id SERIAL NOT NULL, 
+	name VARCHAR(255) NOT NULL, 
+	age INTEGER, 
+	conditions TEXT, 
+	allergies TEXT, 
+	created_at TIMESTAMP WITH TIME ZONE, 
+	PRIMARY KEY (patient_id)
+);
+
+CREATE TABLE class_interactions (
+	interaction_id SERIAL NOT NULL, 
+	class1_id INTEGER NOT NULL, 
+	class2_id INTEGER NOT NULL, 
+	severity severitylevel NOT NULL, 
+	description TEXT, 
+	PRIMARY KEY (interaction_id), 
+	CONSTRAINT chk_class_order CHECK (class1_id < class2_id), 
+	CONSTRAINT uq_class1_class2 UNIQUE (class1_id, class2_id), 
+	FOREIGN KEY(class1_id) REFERENCES drug_classes (class_id) ON DELETE CASCADE, 
+	FOREIGN KEY(class2_id) REFERENCES drug_classes (class_id) ON DELETE CASCADE
+);
+
+CREATE TABLE drugs (
+	drug_id SERIAL NOT NULL, 
+	brand_name VARCHAR(255) NOT NULL, 
+	generic_name VARCHAR(255) NOT NULL, 
+	description TEXT, 
+	drug_class_id INTEGER, 
+	created_at TIMESTAMP WITH TIME ZONE, 
+	PRIMARY KEY (drug_id), 
+	FOREIGN KEY(drug_class_id) REFERENCES drug_classes (class_id) ON DELETE SET NULL
+);
+
+CREATE TABLE drug_interactions (
+	interaction_id SERIAL NOT NULL, 
+	drug1_id INTEGER NOT NULL, 
+	drug2_id INTEGER NOT NULL, 
+	severity severitylevel NOT NULL, 
+	description TEXT, 
+	evidence_url TEXT, 
+	threshold_mg INTEGER, 
+	PRIMARY KEY (interaction_id), 
+	CONSTRAINT chk_drug_order CHECK (drug1_id < drug2_id), 
+	CONSTRAINT uq_drug1_drug2 UNIQUE (drug1_id, drug2_id), 
+	FOREIGN KEY(drug1_id) REFERENCES drugs (drug_id) ON DELETE CASCADE, 
+	FOREIGN KEY(drug2_id) REFERENCES drugs (drug_id) ON DELETE CASCADE
+);
+
+CREATE TABLE patient_drugs (
+	id SERIAL NOT NULL, 
+	patient_id INTEGER NOT NULL, 
+	drug_id INTEGER NOT NULL, 
+	dosage_mg INTEGER, 
+	frequency_per_day INTEGER, 
+	PRIMARY KEY (id), 
+	FOREIGN KEY(patient_id) REFERENCES patients (patient_id) ON DELETE CASCADE, 
+	FOREIGN KEY(drug_id) REFERENCES drugs (drug_id) ON DELETE CASCADE
+);
+

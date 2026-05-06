@@ -2,28 +2,61 @@ import itertools
 from typing import List
 from sqlalchemy.orm import Session
 from sqlalchemy import or_, and_
-from app.models import DrugInteraction, ClassInteraction, Drug, SeverityLevel, DrugClass
+from app.models import Medication, DrugInteraction, ClassInteraction, SeverityLevel, DrugClass
 from app.schemas import InteractionCheckResponse, InteractionDetail
+import os
 
+# Risk scoring constants
+SCORE_DEDUCTIONS = {
+    SeverityLevel.Contraindicated: int(os.getenv("SCORE_DEDUCTION_CONTRAINDICATED", "40")),
+    SeverityLevel.Severe:          int(os.getenv("SCORE_DEDUCTION_SEVERE", "25")),
+    SeverityLevel.Moderate:        int(os.getenv("SCORE_DEDUCTION_MODERATE", "12")),
+    SeverityLevel.Mild:            int(os.getenv("SCORE_DEDUCTION_MILD", "5")),
+}
 
-def check_drug_combinations(db: Session, drug_ids: List[int], user_id: int = None) -> InteractionCheckResponse:
+CASCADE_WEIGHTS = {
+    SeverityLevel.Contraindicated: int(os.getenv("CASCADE_WEIGHT_CONTRAINDICATED", "50")),
+    SeverityLevel.Severe:          int(os.getenv("CASCADE_WEIGHT_SEVERE", "10")),
+    SeverityLevel.Moderate:        int(os.getenv("CASCADE_WEIGHT_MODERATE", "3")),
+    SeverityLevel.Mild:            int(os.getenv("CASCADE_WEIGHT_MILD", "1")),
+}
+
+CASCADE_CONTRAINDICATED_THRESHOLD = int(os.getenv("CASCADE_CONTRAINDICATED_THRESHOLD", "50"))
+CASCADE_SEVERE_THRESHOLD          = int(os.getenv("CASCADE_SEVERE_THRESHOLD", "10"))
+CASCADE_MODERATE_THRESHOLD        = int(os.getenv("CASCADE_MODERATE_THRESHOLD", "6"))
+
+def check_drug_combinations(db: Session, drug_ids: List[int]) -> InteractionCheckResponse:
     if len(drug_ids) < 2:
         return InteractionCheckResponse(block_action=False, interactions=[])
 
     unique_sorted_ids = sorted(list(set(drug_ids)))
     
-    # 1. Fetch drugs to know their classes
-    drugs = db.query(Drug).filter(Drug.drug_id.in_(unique_sorted_ids)).all()
-    drug_map = {d.drug_id: d for d in drugs}
+    # 1. Fetch medications
+    meds = db.query(Medication).filter(Medication.medication_id.in_(unique_sorted_ids)).all()
+    med_map = {m.medication_id: m for m in meds}
     
-    # Missing drugs handles gracefully
-    valid_ids = [d_id for d_id in unique_sorted_ids if d_id in drug_map]
+    valid_ids = [m_id for m_id in unique_sorted_ids if m_id in med_map]
     if len(valid_ids) < 2:
-        return InteractionCheckResponse(block_action=False, interactions=[])
+        return InteractionCheckResponse(block_action=False, interactions=[], warnings=[])
 
-    # 2. Combinatorial Generation O(N^2) for Specific Drugs
-    drug_pairs = list(itertools.combinations(valid_ids, 2))
+    warnings = []
     
+    # 1.5 Duplicate Therapy Detection
+    generic_counts = {}
+    for m_id in valid_ids:
+        m = med_map[m_id]
+        if m.generic_name:
+            generic = m.generic_name.lower().strip()
+            if generic not in generic_counts:
+                generic_counts[generic] = []
+            generic_counts[generic].append(m.brand_name)
+            
+    for generic, brands in generic_counts.items():
+        if len(brands) > 1:
+            warnings.append(f"Silent Overdose Risk: Multiple medications contain {generic.title()} ({', '.join(brands)}).")
+
+    # 2. Specific Drug Interactions
+    drug_pairs = list(itertools.combinations(valid_ids, 2))
     drug_query_conditions = [
         and_(DrugInteraction.drug1_id == p[0], DrugInteraction.drug2_id == p[1])
         for p in drug_pairs
@@ -31,14 +64,14 @@ def check_drug_combinations(db: Session, drug_ids: List[int], user_id: int = Non
     
     specific_interactions = db.query(DrugInteraction).filter(or_(*drug_query_conditions)).all() if drug_query_conditions else []
     
-    # 3. Combinatorial Generation for Drug Classes
+    # 3. Class Interactions
     class_pairs = set()
-    pair_to_classes = {} # map (drug1, drug2) to (class1, class2)
+    pair_to_classes = {}
     for p in drug_pairs:
-        d1 = drug_map[p[0]]
-        d2 = drug_map[p[1]]
-        if d1.drug_class_id and d2.drug_class_id and d1.drug_class_id != d2.drug_class_id:
-            c1, c2 = sorted([d1.drug_class_id, d2.drug_class_id])
+        m1 = med_map[p[0]]
+        m2 = med_map[p[1]]
+        if m1.drug_class_id and m2.drug_class_id and m1.drug_class_id != m2.drug_class_id:
+            c1, c2 = sorted([m1.drug_class_id, m2.drug_class_id])
             class_pairs.add((c1, c2))
             pair_to_classes[p] = (c1, c2)
             
@@ -49,7 +82,6 @@ def check_drug_combinations(db: Session, drug_ids: List[int], user_id: int = Non
     
     class_interacts = db.query(ClassInteraction).filter(or_(*class_query_conditions)).all() if class_query_conditions else []
     
-    # Build maps for quick lookup and merging
     classes = db.query(DrugClass).all()
     class_name_map = {c.class_id: c.class_name for c in classes}
     class_interact_map = {(ci.class1_id, ci.class2_id): ci for ci in class_interacts}
@@ -66,69 +98,64 @@ def check_drug_combinations(db: Session, drug_ids: List[int], user_id: int = Non
     }
     current_highest_rank = 0
 
-    # Add specific interactions
     for interaction in specific_interactions:
         details.append(InteractionDetail(
             drug1_id=interaction.drug1_id,
             drug2_id=interaction.drug2_id,
             severity=interaction.severity,
             description=interaction.description,
-            evidence_url=interaction.evidence_url,
             is_class_interaction=False
         ))
-        
-        if interaction.severity == SeverityLevel.Contraindicated:
-            block_action = True
-            
+        if interaction.severity == SeverityLevel.Contraindicated: block_action = True
         rank = severity_rank.get(interaction.severity, 0)
         if rank > current_highest_rank:
             current_highest_rank = rank
             highest_severity = interaction.severity
 
-    # Add class interactions if no specific interaction exists for the pair
-    # (Specific overrides Class)
     specific_pair_set = set((i.drug1_id, i.drug2_id) for i in specific_interactions)
     
     for p in drug_pairs:
-        if p in specific_pair_set:
-            continue
+        if p in specific_pair_set: continue
         if p in pair_to_classes:
             cp = pair_to_classes[p]
             if cp in class_interact_map:
                 ci = class_interact_map[cp]
                 details.append(InteractionDetail(
-                    drug1_id=p[0],
-                    drug2_id=p[1],
-                    severity=ci.severity,
-                    description=ci.description,
+                    drug1_id=p[0], drug2_id=p[1],
+                    severity=ci.severity, description=ci.description,
                     is_class_interaction=True,
                     class1_name=class_name_map.get(cp[0]),
                     class2_name=class_name_map.get(cp[1])
                 ))
-                
-                if ci.severity == SeverityLevel.Contraindicated:
-                    block_action = True
-                    
+                if ci.severity == SeverityLevel.Contraindicated: block_action = True
                 rank = severity_rank.get(ci.severity, 0)
                 if rank > current_highest_rank:
                     current_highest_rank = rank
                     highest_severity = ci.severity
 
-    # Compute Risk Score (0 = Perfect, 100 = Max Risk)
     score = 100
-    score_deductions = {
-        SeverityLevel.Contraindicated: 40,
-        SeverityLevel.Severe: 25,
-        SeverityLevel.Moderate: 12,
-        SeverityLevel.Mild: 5
-    }
+    cascade_score = 0
     for d in details:
-        score -= score_deductions.get(d.severity, 0)
+        score -= SCORE_DEDUCTIONS.get(d.severity, 0)
+        cascade_score += CASCADE_WEIGHTS.get(d.severity, 0)
+
     risk_score = max(0, score)
+
+    # Cumulative Escalation
+    if cascade_score >= CASCADE_CONTRAINDICATED_THRESHOLD:
+        highest_severity = SeverityLevel.Contraindicated
+        block_action = True
+    elif cascade_score >= CASCADE_SEVERE_THRESHOLD:
+        if severity_rank.get(highest_severity, 0) < 3:
+            highest_severity = SeverityLevel.Severe
+    elif cascade_score >= CASCADE_MODERATE_THRESHOLD:
+        if severity_rank.get(highest_severity, 0) < 2:
+            highest_severity = SeverityLevel.Moderate
 
     return InteractionCheckResponse(
         block_action=block_action,
         highest_severity=highest_severity,
         interactions=details,
-        risk_score=risk_score
+        risk_score=risk_score,
+        warnings=warnings
     )
