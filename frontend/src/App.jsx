@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { ShieldCheck, Users, Database, BarChart2, ClipboardList, Settings, Bot, Activity, Printer } from 'lucide-react';
+import { ShieldCheck, Users, Database, BarChart2, ClipboardList, Settings, Bot, Activity, Printer, User } from 'lucide-react';
 import DrugCheckerTab from './tabs/DrugCheckerTab';
 import StatsTab from './tabs/StatsTab';
 import DrugExplorerTab from './tabs/DrugExplorerTab';
@@ -7,19 +7,41 @@ import PatientsTab from './tabs/PatientsTab';
 import AuditLogTab from './tabs/AuditLogTab';
 import AdminTab from './tabs/AdminTab';
 import ChatbotTab from './tabs/ChatbotTab';
+import AccountTab from './tabs/AccountTab';
+import Auth from './Auth';
 
 export default function App() {
   const [activeTab, setActiveTab] = useState('checker');
+  const [activePatient, setActivePatient] = useState(null);
   const [preloadedDrugs, setPreloadedDrugs] = useState(null);
   const [checkerCartIds, setCheckerCartIds] = useState([]);
+  const [isAuthenticated, setIsAuthenticated] = useState(!!localStorage.getItem('token'));
   
-  // Set default admin role to ensure all features are accessible
-  const userRole = 'admin';
+  const handleLoginSuccess = () => {
+    setIsAuthenticated(true);
+  };
 
-  const handleLoadPatient = (medications) => {
-    setPreloadedDrugs(medications);
+  const handleLogout = () => {
+    localStorage.removeItem('token');
+    setIsAuthenticated(false);
+  };
+
+  const handleLoadPatient = (patient) => {
+    setPreloadedDrugs(patient.current_medications);
+    setActivePatient(patient);
     setActiveTab('checker');
   };
+
+  const getRoleFromToken = () => {
+    const token = localStorage.getItem('token');
+    if (!token) return 'user';
+    try {
+      const payload = JSON.parse(atob(token.split('.')[1]));
+      return payload.role || 'user';
+    } catch (e) { return 'user'; }
+  };
+
+  const userRole = getRoleFromToken();
 
   const tabs = [
     { id: 'checker', label: 'Drug Checker', icon: ShieldCheck },
@@ -27,9 +49,14 @@ export default function App() {
     { id: 'explorer', label: 'Drug Explorer', icon: Database },
     { id: 'stats', label: 'Statistics', icon: BarChart2 },
     { id: 'audit', label: 'Audit Log', icon: ClipboardList },
-    { id: 'admin', label: 'Admin', icon: Settings },
+    ...(userRole === 'admin' ? [{ id: 'admin', label: 'Admin', icon: Settings }] : []),
     { id: 'chatbot', label: 'Ask the Vault', icon: Bot },
+    { id: 'account', label: 'Account', icon: User },
   ];
+
+  if (!isAuthenticated) {
+    return <Auth onLoginSuccess={handleLoginSuccess} />;
+  }
 
   return (
     <div style={{ width: '100vw', height: '100vh', display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
@@ -54,18 +81,23 @@ export default function App() {
               </button>
             );
           })}
+          <button onClick={handleLogout}
+            style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', padding: '0.65rem 1.2rem', background: 'transparent', border: '1px solid transparent', borderRadius: '8px', color: '#ef4444', cursor: 'pointer', fontFamily: 'inherit', fontWeight: 500, fontSize: '1.05rem', transition: 'all 0.2s', marginLeft: '1rem' }}>
+            Logout
+          </button>
         </div>
       </div>
 
       {/* Main Content Area */}
       <div style={{ flex: 1, overflow: 'hidden', padding: activeTab === 'checker' ? '1.5rem' : 0 }}>
-        {activeTab === 'checker' && <DrugCheckerTab preloadedDrugs={preloadedDrugs} onPreloadConsumed={() => setPreloadedDrugs(null)} onCartChange={setCheckerCartIds} />}
+        {activeTab === 'checker' && <DrugCheckerTab preloadedDrugs={preloadedDrugs} activePatient={activePatient} onPreloadConsumed={() => setPreloadedDrugs(null)} onCartChange={setCheckerCartIds} />}
         {activeTab === 'patients' && <PatientsTab onLoadPatient={handleLoadPatient} />}
         {activeTab === 'explorer' && <DrugExplorerTab />}
         {activeTab === 'stats' && <div style={{ height: '100%', overflowY: 'auto' }}><StatsTab /></div>}
         {activeTab === 'audit' && <div style={{ height: '100%', overflowY: 'auto' }}><AuditLogTab /></div>}
         {activeTab === 'admin' && <div style={{ height: '100%', overflowY: 'auto' }}><AdminTab /></div>}
         {activeTab === 'chatbot' && <div style={{ height: '100%', display: 'flex', flexDirection: 'column' }}><ChatbotTab cartDrugIds={checkerCartIds} /></div>}
+        {activeTab === 'account' && <div style={{ height: '100%', overflowY: 'auto' }}><AccountTab /></div>}
       </div>
     </div>
   );

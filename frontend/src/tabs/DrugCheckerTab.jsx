@@ -1,11 +1,11 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { Search, ShieldAlert, ShieldCheck, X, Activity, AlertTriangle, Mail } from 'lucide-react';
+import { Search, ShieldAlert, ShieldCheck, X, Activity, AlertTriangle, Mail, ClipboardList, Users } from 'lucide-react';
 import HeatmapMatrix from '../components/HeatmapMatrix';
 import RiskGauge from '../components/RiskGauge';
 
 const SEARCH_MIN_CHARS = 3;
 
-export default function DrugCheckerTab({ preloadedDrugs, onPreloadConsumed, onCartChange }) {
+export default function DrugCheckerTab({ preloadedDrugs, activePatient, onPreloadConsumed, onCartChange }) {
   const [searchTerm, setSearchTerm] = useState('');
   const [searchResults, setSearchResults] = useState([]);
   const [cart, setCart] = useState([]);
@@ -17,9 +17,14 @@ export default function DrugCheckerTab({ preloadedDrugs, onPreloadConsumed, onCa
   const [isOverridden, setIsOverridden] = useState(false);
   const [riskScore, setRiskScore] = useState(null);
   const [warningsList, setWarningsList] = useState([]);  // clinical warnings from backend
+  const [scoreReasoning, setScoreReasoning] = useState(null);
+  const [checking, setChecking] = useState(false);
   const [emailing, setEmailing] = useState(false);
 
   const handleEmailReport = async () => {
+    const recipient = activePatient?.email;
+    if (!recipient && !confirm('No patient email found. Send to your administrative email instead?')) return;
+    
     setEmailing(true);
     try {
       const order = { 'Mild': 1, 'Moderate': 2, 'Severe': 3, 'Contraindicated': 4 };
@@ -33,7 +38,8 @@ export default function DrugCheckerTab({ preloadedDrugs, onPreloadConsumed, onCa
         highest_severity: highestSev,
         interactions: interactions,
         risk_score: riskScore,
-        warnings: warningsList
+        warnings: warningsList,
+        recipient_email: activePatient?.email || null
       };
 
       const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000';
@@ -45,7 +51,7 @@ export default function DrugCheckerTab({ preloadedDrugs, onPreloadConsumed, onCa
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.detail || 'Failed to email report');
-      alert('Report successfully emailed to your registered address!');
+      alert(`Report successfully emailed to ${activePatient?.email || 'your address'}!`);
     } catch (err) {
       alert(err.message);
     } finally {
@@ -79,12 +85,17 @@ export default function DrugCheckerTab({ preloadedDrugs, onPreloadConsumed, onCa
   }, [searchTerm]);
 
   const checkInteractions = useCallback(async (overrideMsg = null) => {
-    if (cart.length < 2) { setInteractions([]); setIsBlocked(false); setIsOverridden(false); setRiskScore(null); setWarningsList([]); return; }
+    if (cart.length < 2) { setInteractions([]); setIsBlocked(false); setIsOverridden(false); setRiskScore(null); setWarningsList([]); setScoreReasoning(null); return; }
+    setChecking(true);
     try {
       const payload = { drug_ids: cart.map(d => d.drug_id) };
       if (overrideMsg) payload.override_reason = overrideMsg;
+      const token = localStorage.getItem('token');
       const res = await fetch('/api/v1/interactions/check', {
-        method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload)
+        method: 'POST', headers: { 
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
+        }, body: JSON.stringify(payload)
       });
       if (res.ok) {
         const data = await res.json();
@@ -92,10 +103,12 @@ export default function DrugCheckerTab({ preloadedDrugs, onPreloadConsumed, onCa
         setIsBlocked(data.block_action);
         setRiskScore(data.risk_score);
         setWarningsList(data.warnings || []);
+        setScoreReasoning(data.score_reasoning);
         if (overrideMsg) { setIsOverridden(true); setShowOverrideModal(false); setOverrideReason(''); }
         else if (data.block_action) setIsOverridden(false);
       }
     } catch(e) { console.error('Interaction check failed:', e); }
+    finally { setChecking(false); }
   }, [cart]);
 
   useEffect(() => { checkInteractions(); }, [cart]);
@@ -132,7 +145,16 @@ export default function DrugCheckerTab({ preloadedDrugs, onPreloadConsumed, onCa
 
       {/* LEFT */}
       <div className="glass-panel" style={{ overflowY: 'auto' }}>
-        <h1 style={{fontSize: '1.5rem'}}><Activity size={26} color="#38bdf8" /> Drug Vault</h1>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.5rem' }}>
+          <div>
+            <h1 style={{ fontSize: '1.5rem', margin: 0 }}><Activity size={26} color="#38bdf8" /> Drug Vault</h1>
+            {activePatient && (
+              <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', marginTop: '0.4rem', color: '#38bdf8', fontSize: '0.85rem', fontWeight: 600 }}>
+                <Users size={14} /> Active Patient: {activePatient.name} {activePatient.email ? `(${activePatient.email})` : ''}
+              </div>
+            )}
+          </div>
+        </div>
         <p className="subtitle">Clinical Decision Support System</p>
         <div style={{ position: 'relative', marginBottom: '0.5rem' }}>
           <Search size={18} color="#64748b" style={{ position: 'absolute', top: '21px', left: '18px' }} />
@@ -183,7 +205,15 @@ export default function DrugCheckerTab({ preloadedDrugs, onPreloadConsumed, onCa
           </div>
         ) : (
           <>
-            {(isBlocked && !isOverridden) ? (
+            {checking ? (
+              <div className="banner loading" style={{ background: 'rgba(56,189,248,0.1)', border: '1px solid rgba(56,189,248,0.3)', color: '#38bdf8' }}>
+                <Activity size={26} className="animate-spin" />
+                <div>
+                  <div style={{ fontWeight: 700 }}>CLINICAL ANALYSIS IN PROGRESS</div>
+                  <div style={{ fontSize: '0.85rem', opacity: 0.9 }}>AI is researching clinical datasets and drug-drug interactions...</div>
+                </div>
+              </div>
+            ) : (isBlocked && !isOverridden) ? (
               <div className="banner alert">
                 <ShieldAlert size={28} />
                 <div style={{ flex: 1 }}>
@@ -205,15 +235,25 @@ export default function DrugCheckerTab({ preloadedDrugs, onPreloadConsumed, onCa
             ) : (
               <div className="banner safe"><ShieldCheck size={26} />
                 <div>
-                  <div style={{ fontWeight: 700 }}>All Clear</div>
-                  <div style={{ fontSize: '0.85rem', opacity: 0.9 }}>No known interactions detected in the database.</div>
+                  <div style={{ fontWeight: 700 }}>{riskScore === 100 ? 'OPTIMAL SAFETY PROFILE' : 'CLINICAL CLEARANCE'}</div>
+                  <div style={{ fontSize: '0.85rem', opacity: 0.9 }}>{scoreReasoning}</div>
                 </div>
               </div>
             )}
 
             <RiskGauge score={riskScore} />
 
-            {/* Clinical Warnings Panel — silent overdose, cascade escalations */}
+            {/* Score Reasoning Panel */}
+            {scoreReasoning && (
+              <div style={{ padding: '0.9rem 1.1rem', background: 'rgba(15,23,42,0.4)', border: '1px solid rgba(148,163,184,0.1)', borderRadius: '12px', marginBottom: '1.25rem' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '0.4rem', color: '#94a3b8', fontSize: '0.75rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+                  <ClipboardList size={14} color="#38bdf8" /> Safety Score Reasoning
+                </div>
+                <div style={{ fontSize: '0.88rem', color: '#cbd5e1', lineHeight: 1.5 }}>
+                  {scoreReasoning}
+                </div>
+              </div>
+            )}
             {warningsList.length > 0 && (
               <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem', marginBottom: '1.25rem' }}>
                 {warningsList.map((w, i) => (
@@ -254,17 +294,16 @@ export default function DrugCheckerTab({ preloadedDrugs, onPreloadConsumed, onCa
                       </div>
                       <span className={`severity-tag tag-${interaction.severity}`}>{interaction.severity}</span>
                     </div>
-                    <p style={{ fontSize: '0.87rem', color: '#cbd5e1', lineHeight: 1.6, marginTop: '0.75rem' }}>{interaction.description}</p>
+                    <div style={{ marginTop: '1rem', padding: '0.75rem', background: 'rgba(15,23,42,0.5)', borderRadius: '8px', borderLeft: `3px solid ${interaction.severity === 'Contraindicated' ? '#ef4444' : (interaction.severity === 'Severe' ? '#f87171' : '#f59e0b')}` }}>
+                      <div style={{ fontSize: '0.75rem', color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: '0.3rem', fontWeight: 600 }}>Pharmacological Reason</div>
+                      <p style={{ fontSize: '0.87rem', color: '#f8fafc', lineHeight: 1.6 }}>{interaction.description || 'Specific pharmacological mechanism not documented. Proceed with clinical caution.'}</p>
+                    </div>
                   </div>
                 );
               })}
             </div>
             {/* Heatmap Matrix — rendered dynamically from interactions data */}
             <HeatmapMatrix cart={cart} interactions={interactions} />
-
-            {interactions.length === 0 && cart.length >= 2 && (
-              <p style={{ textAlign: 'center', color: '#334155', marginTop: '4rem' }}>✓ No known interactions found for this combination.</p>
-            )}
           </>
         )}
       </div>

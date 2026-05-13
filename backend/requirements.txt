@@ -5,7 +5,7 @@ pydantic>=2.9.2
 alembic
 python-dotenv
 psycopg[binary]
-google-generativeai
+google-genai
 passlib[bcrypt]
 python-jose[cryptography]
 python-multipart

@@ -15,7 +15,10 @@ export default function DrugExplorerTab() {
   const fetchDrugs = useCallback(async (p = 1, s = '') => {
     setLoading(true);
     try {
-      const res = await fetch(`/api/v1/drugs?page=${p}&limit=${DRUG_PAGE_SIZE}&search=${encodeURIComponent(s)}`);
+      const token = localStorage.getItem('token');
+      const res = await fetch(`/api/v1/drugs?page=${p}&limit=${DRUG_PAGE_SIZE}&search=${encodeURIComponent(s)}`, {
+        headers: { 'Authorization': `Bearer ${token}` }
+      });
       if (res.ok) setData(await res.json());
     } catch(e) {} finally { setLoading(false); }
   }, []);
@@ -28,7 +31,10 @@ export default function DrugExplorerTab() {
     setSelected(drug);
     setDrugInteractions(null);
     try {
-      const res = await fetch(`/api/v1/drugs/${drug.drug_id}/interactions`);
+      const token = localStorage.getItem('token');
+      const res = await fetch(`/api/v1/drugs/${drug.drug_id}/interactions`, {
+        headers: { 'Authorization': `Bearer ${token}` }
+      });
       if (res.ok) setDrugInteractions(await res.json());
     } catch(e) {}
   };
@@ -96,7 +102,30 @@ export default function DrugExplorerTab() {
             </h4>
             {!drugInteractions ? <div style={{ color: '#64748b', fontSize: '0.88rem' }}>Loading...</div> :
               drugInteractions.interactions.length === 0 ?
-                <p style={{ color: '#334155', fontSize: '0.88rem' }}>No specific interactions recorded for this drug.</p> :
+                <div style={{ textAlign: 'center', padding: '1.5rem', background: 'rgba(15,23,42,0.4)', borderRadius: '12px', border: '1px solid rgba(148,163,184,0.1)' }}>
+                  <p style={{ color: '#64748b', fontSize: '0.88rem', marginBottom: '1rem' }}>No recorded interactions in the local database.</p>
+                  <button onClick={async () => {
+                    setLoading(true);
+                    try {
+                      const token = localStorage.getItem('token');
+                      const res = await fetch(`/api/v1/chat`, {
+                        method: 'POST',
+                        headers: { 
+                          'Content-Type': 'application/json',
+                          'Authorization': `Bearer ${token}`
+                        },
+                        body: JSON.stringify({ question: `What are the most common and dangerous drug interactions for ${selected.brand_name} (${selected.generic_name})?`, drug_ids: [selected.drug_id] })
+                      });
+                      if (res.ok) {
+                        const d = await res.json();
+                        // Display as a temporary alert/modal or inject into list
+                        alert(`Gemini AI Research for ${selected.brand_name}:\n\n${d.answer}`);
+                      }
+                    } catch(e) {} finally { setLoading(false); }
+                  }} style={{ padding: '0.6rem 1rem', background: 'rgba(56,189,248,0.1)', border: '1px solid rgba(56,189,248,0.3)', borderRadius: '8px', color: '#38bdf8', fontSize: '0.8rem', cursor: 'pointer', fontWeight: 600 }}>
+                    <Zap size={14} style={{ marginRight: '0.5rem' }} /> Perform AI Research Deep Dive
+                  </button>
+                </div> :
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
                   {drugInteractions.interactions.map((i, idx) => (
                     <div key={idx} style={{ background: 'rgba(15,23,42,0.6)', border: `1px solid ${SEV_COLORS[i.severity]}25`, borderLeft: `3px solid ${SEV_COLORS[i.severity]}`, borderRadius: '10px', padding: '0.85rem 1rem' }}>

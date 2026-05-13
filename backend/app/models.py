@@ -97,11 +97,14 @@ class ClassInteraction(Base):
 class Patient(Base):
     __tablename__ = 'patients'
     patient_id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(Integer, ForeignKey('users.id', ondelete='CASCADE'), nullable=True, index=True)
     name = Column(String(255), nullable=False, index=True)
+    email = Column(String(255), nullable=True)
     age = Column(Integer, nullable=True)
     conditions = Column(Text, nullable=True)
     allergies = Column(Text, nullable=True)
 
+    user = relationship("User")
     current_medications = relationship("PatientMedication", back_populates="patient")
 
 class PatientMedication(Base):
@@ -116,9 +119,12 @@ class PatientMedication(Base):
 class AuditLog(Base):
     __tablename__ = 'audit_logs'
     log_id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(Integer, ForeignKey('users.id', ondelete='CASCADE'), nullable=True, index=True)
     timestamp = Column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
     drugs_checked = Column(JSON)
     interactions_found = Column(Integer)
     highest_severity = Column(Enum(SeverityLevel), nullable=True)
     action_taken = Column(String(50)) # BLOCKED, ALLOWED, ALLOWED_WITH_OVERRIDE
     override_reason = Column(Text, nullable=True)
+
+    user = relationship("User")

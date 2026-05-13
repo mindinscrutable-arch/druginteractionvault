@@ -20,6 +20,7 @@ const SUGGESTED = [
 ];
 
 export default function ChatbotTab({ cartDrugIds = [] }) {
+  const [dynamicSuggested, setDynamicSuggested] = useState(SUGGESTED);
   const [messages, setMessages] = useState([
     {
       role: 'assistant',
@@ -42,20 +43,36 @@ export default function ChatbotTab({ cartDrugIds = [] }) {
     setLoading(true);
 
     try {
+      const token = localStorage.getItem('token');
       const res = await fetch('/api/v1/chat', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
+        },
         body: JSON.stringify({ question: q, drug_ids: cartDrugIds }),
       });
       if (res.ok) {
         const data = await res.json();
-        setMessages(prev => [...prev, { role: 'assistant', text: data.answer }]);
+        let answer = data.answer;
+        
+        // Parse dynamic suggestions
+        if (answer.includes('SUGGESTED_QUESTIONS:')) {
+          const parts = answer.split('SUGGESTED_QUESTIONS:');
+          answer = parts[0].trim();
+          const qList = parts[1].trim().split('\n')
+            .map(line => line.replace(/^-\s*/, '').trim())
+            .filter(line => line.length > 5);
+          if (qList.length > 0) setDynamicSuggested(qList);
+        }
+        
+        setMessages(prev => [...prev, { role: 'assistant', text: answer }]);
       } else {
         const err = await res.json();
         setMessages(prev => [...prev, { role: 'assistant', text: `⚠ Error: ${err.detail || 'Failed to reach AI.'}`, isError: true }]);
       }
-    } catch {
-      setMessages(prev => [...prev, { role: 'assistant', text: '⚠ Could not connect to the AI service. Check that GEMINI_API_KEY is set in your .env file.', isError: true }]);
+    } catch (err) {
+      setMessages(prev => [...prev, { role: 'assistant', text: '⚠ Could not connect to the AI service. Error: ' + err.message, isError: true }]);
     } finally {
       setLoading(false);
     }
@@ -72,7 +89,7 @@ export default function ChatbotTab({ cartDrugIds = [] }) {
         <div>
           <div style={{ fontWeight: 700, fontSize: '1rem' }}>Ask the Vault AI</div>
           <div style={{ color: '#64748b', fontSize: '0.78rem' }}>
-            Gemini 1.5 Flash · Grounded in live DB
+            Gemini 2.5 Flash · Grounded in live DB
             {cartDrugIds.length > 0 && <span style={{ color: '#38bdf8', marginLeft: '0.5rem' }}>· {cartDrugIds.length} drug{cartDrugIds.length > 1 ? 's' : ''} from checker as context</span>}
           </div>
         </div>
@@ -120,18 +137,18 @@ export default function ChatbotTab({ cartDrugIds = [] }) {
         <div ref={bottomRef} />
       </div>
 
-      {/* Suggestions */}
-      {messages.length <= 1 && (
-        <div style={{ padding: '0 2rem 1rem', display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
-          {SUGGESTED.map((s, i) => (
-            <button key={i} onClick={() => send(s)} style={{
-              padding: '0.4rem 0.9rem', background: 'rgba(56,189,248,0.06)',
-              border: '1px solid rgba(56,189,248,0.2)', borderRadius: '20px',
-              color: '#38bdf8', fontSize: '0.78rem', cursor: 'pointer', fontFamily: 'inherit',
-            }}>{s}</button>
-          ))}
-        </div>
-      )}
+      {/* Suggestions (Dynamic) */}
+      <div style={{ padding: '0.5rem 2rem 1rem', display: 'flex', gap: '0.5rem', flexWrap: 'wrap', borderTop: '1px solid rgba(148,163,184,0.04)' }}>
+        <span style={{ fontSize: '0.75rem', color: '#64748b', width: '100%', marginBottom: '0.4rem' }}>Follow-up questions based on our discussion:</span>
+        {dynamicSuggested.map((s, i) => (
+          <button key={i} onClick={() => send(s)} disabled={loading} style={{
+            padding: '0.4rem 0.9rem', background: 'rgba(56,189,248,0.06)',
+            border: '1px solid rgba(56,189,248,0.2)', borderRadius: '20px',
+            color: '#38bdf8', fontSize: '0.78rem', cursor: loading ? 'not-allowed' : 'pointer', fontFamily: 'inherit',
+            transition: 'all 0.2s',
+          }}>{s}</button>
+        ))}
+      </div>
 
       {/* Input Bar */}
       <div style={{ padding: '1rem 2rem', borderTop: '1px solid rgba(148,163,184,0.08)', flexShrink: 0, display: 'flex', gap: '0.75rem' }}>

@@ -8,7 +8,10 @@ export default function StatsTab() {
   const [stats, setStats] = useState(null);
   const [loading, setLoading] = useState(true);
   useEffect(() => {
-    fetch('/api/v1/stats').then(r => r.json()).then(d => { setStats(d); setLoading(false); }).catch(() => setLoading(false));
+    const token = localStorage.getItem('token');
+    fetch('/api/v1/stats', {
+      headers: { 'Authorization': `Bearer ${token}` }
+    }).then(r => r.json()).then(d => { setStats(d); setLoading(false); }).catch(() => setLoading(false));
   }, []);
   if (loading) return <div style={{ textAlign: 'center', color: '#64748b', padding: '6rem' }}>Loading statistics...</div>;
   if (!stats) return <div style={{ textAlign: 'center', color: '#ef4444', padding: '6rem' }}>Failed to load stats.</div>;

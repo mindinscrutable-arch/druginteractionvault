@@ -11,7 +11,13 @@ export default function AuditLogTab() {
 
   const fetchLogs = useCallback(async (fetchLimit = limit) => {
     setLoading(true);
-    try { const res = await fetch(`/api/v1/audit/history?limit=${fetchLimit}`); if (res.ok) setLogs(await res.json()); }
+    try { 
+      const token = localStorage.getItem('token');
+      const res = await fetch(`/api/v1/audit/history?limit=${fetchLimit}`, {
+        headers: { 'Authorization': `Bearer ${token}` }
+      }); 
+      if (res.ok) setLogs(await res.json()); 
+    }
     catch(e) {} finally { setLoading(false); }
   }, [limit]);
 

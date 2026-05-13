@@ -21,6 +21,8 @@ class InteractionCheckResponse(BaseModel):
     highest_severity: Optional[SeverityLevel] = None
     interactions: List[InteractionDetail]
     risk_score: Optional[int] = None
+    score_reasoning: Optional[str] = None
+    recipient_email: Optional[str] = None
     warnings: List[str] = []
 
 class DrugSearchResponse(BaseModel):
@@ -39,6 +41,7 @@ class AuditLogEntry(BaseModel):
 
 class PatientCreate(BaseModel):
     name: str
+    email: Optional[str] = None
     age: Optional[int] = None
     conditions: Optional[str] = None
     allergies: Optional[str] = None
@@ -46,6 +49,7 @@ class PatientCreate(BaseModel):
 class PatientResponse(BaseModel):
     patient_id: int
     name: str
+    email: Optional[str] = None
     age: Optional[int] = None
     conditions: Optional[str] = None
     allergies: Optional[str] = None
@@ -88,6 +92,9 @@ class UserResponse(BaseModel):
 class Token(BaseModel):
     access_token: str
     token_type: str
+
+class EmailRequest(BaseModel):
+    email: str
 
 class EmailVerify(BaseModel):
     email: str

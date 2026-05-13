@@ -6,13 +6,16 @@ const SEARCH_MIN_CHARS = 3;
 export default function PatientsTab({ onLoadPatient }) {
   const [patients, setPatients] = useState([]);
   const [showNew, setShowNew] = useState(false);
-  const [form, setForm] = useState({ name: '', age: '', conditions: '', allergies: '' });
+  const [form, setForm] = useState({ name: '', email: '', age: '', conditions: '', allergies: '' });
   const [drugSearch, setDrugSearch] = useState('');
   const [drugResults, setDrugResults] = useState([]);
   const [activePatient, setActivePatient] = useState(null);
 
   const fetchPatients = async () => {
-    const res = await fetch('/api/v1/patients');
+    const token = localStorage.getItem('token');
+    const res = await fetch('/api/v1/patients', {
+      headers: { 'Authorization': `Bearer ${token}` }
+    });
     if (res.ok) { const data = await res.json(); setPatients(data); }
   };
   useEffect(() => { fetchPatients(); }, []);
@@ -30,33 +33,49 @@ export default function PatientsTab({ onLoadPatient }) {
 
   const createPatient = async () => {
     if (!form.name.trim()) return alert('Name required');
-    await fetch('/api/v1/patients', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ ...form, age: form.age ? parseInt(form.age) : null }) });
-    setForm({ name: '', age: '', conditions: '', allergies: '' });
+    const token = localStorage.getItem('token');
+    await fetch('/api/v1/patients', { 
+      method: 'POST', 
+      headers: { 
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${token}`
+      }, 
+      body: JSON.stringify({ ...form, age: form.age ? parseInt(form.age) : null }) 
+    });
+    setForm({ name: '', email: '', age: '', conditions: '', allergies: '' });
     setShowNew(false);
     fetchPatients();
   };
 
   const deletePatient = async (id) => {
     if (!window.confirm('Delete this patient?')) return;
-    await fetch(`/api/v1/patients/${id}`, { method: 'DELETE' });
+    const token = localStorage.getItem('token');
+    await fetch(`/api/v1/patients/${id}`, { 
+      method: 'DELETE',
+      headers: { 'Authorization': `Bearer ${token}` }
+    });
     if (activePatient?.patient_id === id) setActivePatient(null);
     fetchPatients();
   };
 
   const addDrugToPatient = async (drug) => {
     if (!activePatient) return;
-    await fetch(`/api/v1/patients/${activePatient.patient_id}/drugs/${drug.drug_id}`, { method: 'POST' });
+    const token = localStorage.getItem('token');
+    await fetch(`/api/v1/patients/${activePatient.patient_id}/drugs/${drug.drug_id}`, { 
+      method: 'POST',
+      headers: { 'Authorization': `Bearer ${token}` }
+    });
     setDrugSearch(''); setDrugResults([]);
-    const res = await fetch('/api/v1/patients'); const data = await res.json();
-    setPatients(data);
-    setActivePatient(data.find(p => p.patient_id === activePatient.patient_id));
+    fetchPatients();
   };
 
   const removeDrug = async (drugId) => {
-    await fetch(`/api/v1/patients/${activePatient.patient_id}/drugs/${drugId}`, { method: 'DELETE' });
-    const res = await fetch('/api/v1/patients'); const data = await res.json();
-    setPatients(data);
-    setActivePatient(data.find(p => p.patient_id === activePatient.patient_id));
+    const token = localStorage.getItem('token');
+    await fetch(`/api/v1/patients/${activePatient.patient_id}/drugs/${drugId}`, { 
+      method: 'DELETE',
+      headers: { 'Authorization': `Bearer ${token}` }
+    });
+    fetchPatients();
   };
 
   return (
@@ -74,7 +93,7 @@ export default function PatientsTab({ onLoadPatient }) {
         {showNew && (
           <div style={{ background: 'rgba(15,23,42,0.8)', border: '1px solid rgba(56,189,248,0.2)', borderRadius: '14px', padding: '1.25rem', marginBottom: '1.25rem' }}>
             <h4 style={{ color: '#94a3b8', marginBottom: '1rem', fontSize: '0.85rem', textTransform: 'uppercase', letterSpacing: '0.08em' }}>New Patient</h4>
-            {[['name','Name *'],['age','Age'],['conditions','Conditions (e.g. Diabetes)'],['allergies','Known Allergies']].map(([key,label]) => (
+            {[['name','Name *'],['email','Email (for reports)'],['age','Age'],['conditions','Conditions (e.g. Diabetes)'],['allergies','Known Allergies']].map(([key,label]) => (
               <input key={key} placeholder={label} value={form[key]} onChange={e => setForm({...form,[key]:e.target.value})}
                 style={{ width: '100%', padding: '0.65rem 0.9rem', background: 'rgba(15,23,42,0.6)', border: '1px solid rgba(148,163,184,0.15)', borderRadius: '8px', color: '#f8fafc', fontFamily: 'inherit', fontSize: '0.88rem', marginBottom: '0.5rem' }} />
             ))}
@@ -95,7 +114,10 @@ export default function PatientsTab({ onLoadPatient }) {
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
                 <div>
                   <div style={{ fontWeight: 600 }}>{p.name}</div>
-                  <div style={{ fontSize: '0.78rem', color: '#64748b' }}>{p.age ? `Age ${p.age}` : ''}{p.conditions ? ` · ${p.conditions}` : ''}</div>
+                  <div style={{ fontSize: '0.78rem', color: '#64748b' }}>
+                    {p.age ? `Age ${p.age}` : ''}{p.conditions ? ` · ${p.conditions}` : ''}
+                  </div>
+                  {p.email && <div style={{ fontSize: '0.72rem', color: '#94a3b8', marginTop: '0.1rem' }}>✉ {p.email}</div>}
                   <div style={{ fontSize: '0.75rem', color: '#38bdf8', marginTop: '0.25rem' }}>{p.current_medications?.length ?? 0} med{p.current_medications?.length !== 1 ? 's' : ''}</div>
                 </div>
                 <button onClick={(e) => { e.stopPropagation(); deletePatient(p.patient_id); }}
@@ -126,9 +148,8 @@ export default function PatientsTab({ onLoadPatient }) {
                 {activePatient.allergies && <p style={{ color: '#ef4444', fontSize: '0.82rem', marginTop: '0.25rem' }}>⚠ Allergies: {activePatient.allergies}</p>}
               </div>
               <button
-                onClick={() => onLoadPatient(activePatient.current_medications)}
-                disabled={!activePatient.current_medications?.length}
-                style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', padding: '0.7rem 1.4rem', background: 'linear-gradient(135deg,#38bdf8,#818cf8)', border: 'none', borderRadius: '12px', color: '#020617', fontWeight: 700, cursor: activePatient.current_medications?.length ? 'pointer' : 'not-allowed', fontFamily: 'inherit', opacity: activePatient.current_medications?.length ? 1 : 0.4 }}>
+                onClick={() => onLoadPatient(activePatient)}
+                style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', padding: '0.7rem 1.4rem', background: 'linear-gradient(135deg,#38bdf8,#818cf8)', border: 'none', borderRadius: '12px', color: '#020617', fontWeight: 700, cursor: 'pointer', fontFamily: 'inherit' }}>
                 <ShieldCheck size={16} /> Check Safety
               </button>
             </div>

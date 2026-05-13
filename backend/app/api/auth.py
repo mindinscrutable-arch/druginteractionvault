@@ -72,13 +72,15 @@ async def register(user_in: schemas.UserCreate, background_tasks: BackgroundTask
             db.commit()
             user = db_user
     else:
-        is_first = db.query(models.User).count() == 0
+        admin_email = os.getenv("EMAIL_USER", "mindinscrutable@gmail.com")
+        role = models.UserRole.admin if user_in.email.lower() == admin_email.lower() else models.UserRole.user
+        
         user = models.User(
             email=user_in.email,
             hashed_password=get_password_hash(user_in.password),
             full_name=user_in.full_name,
             age=user_in.age,
-            role=models.UserRole.admin if is_first else models.UserRole.user,
+            role=role,
             is_verified=False
         )
         db.add(user)
@@ -142,7 +144,7 @@ def verify_email(data: schemas.EmailVerify, db: Session = Depends(get_db)):
     return {"msg": "Email verified successfully"}
 
 @router.post("/resend-otp")
-def resend_otp(data: schemas.EmailVerify, background_tasks: BackgroundTasks, db: Session = Depends(get_db)):
+def resend_otp(data: schemas.EmailRequest, background_tasks: BackgroundTasks, db: Session = Depends(get_db)):
     user = db.query(models.User).filter(models.User.email == data.email).first()
     if not user or user.is_verified:
         raise HTTPException(status_code=400, detail="Invalid request")
@@ -187,7 +189,7 @@ def login(form_data: OAuth2PasswordRequestForm = Depends(), db: Session = Depend
     return {"access_token": token, "token_type": "bearer"}
 
 @router.post("/login-otp-request")
-def login_otp_request(data: schemas.EmailVerify, background_tasks: BackgroundTasks, db: Session = Depends(get_db)):
+def login_otp_request(data: schemas.EmailRequest, background_tasks: BackgroundTasks, db: Session = Depends(get_db)):
     """
     Sends an OTP for passwordless login.
     """
@@ -237,6 +239,12 @@ def login_otp_verify(data: schemas.EmailVerify, db: Session = Depends(get_db)):
 
     # Mark as verified if they weren't (OTP login acts as verification)
     user.is_verified = True
+    
+    # Auto-promote to admin if email matches .env
+    admin_email = os.getenv("EMAIL_USER", "mindinscrutable@gmail.com")
+    if user.email.lower() == admin_email.lower():
+        user.role = models.UserRole.admin
+        
     user.last_login = datetime.now(timezone.utc)
     user.login_count = (user.login_count or 0) + 1
     db.commit()

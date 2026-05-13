@@ -12,18 +12,21 @@ export default function HeatmapMatrix({ cart, interactions }) {
   const lookup = {};
   interactions.forEach(i => {
     const key = `${Math.min(i.drug1_id, i.drug2_id)}-${Math.max(i.drug1_id, i.drug2_id)}`;
-    lookup[key] = i.severity;
+    lookup[key] = i;
   });
   const cell = (d1, d2) => {
     if (d1.drug_id === d2.drug_id) return (
       <div key={'self'} style={{ width: 44, height: 44, borderRadius: '6px', background: 'rgba(56,189,248,0.12)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '0.65rem', color: '#38bdf8' }}>✓</div>
     );
     const key = `${Math.min(d1.drug_id, d2.drug_id)}-${Math.max(d1.drug_id, d2.drug_id)}`;
-    const sev = lookup[key];
+    const interaction = lookup[key];
+    const sev = interaction?.severity;
+    const desc = interaction?.description;
     const bg = sev ? (SEV_CELL_BG[sev] || 'rgba(148,163,184,0.15)') : 'rgba(16,185,129,0.25)';
+    const tooltip = sev ? `${d1.brand_name} × ${d2.brand_name}\nSeverity: ${sev}\nReason: ${desc || 'Not specified'}` : `${d1.brand_name} × ${d2.brand_name}: Safe`;
     return (
-      <div key={d2.drug_id} title={sev ? `${d1.brand_name} × ${d2.brand_name}: ${sev}` : `${d1.brand_name} × ${d2.brand_name}: Safe`}
-        style={{ width: 44, height: 44, borderRadius: '6px', background: bg, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '0.6rem', fontWeight: 700, color: '#fff', cursor: 'default', textTransform: 'uppercase', letterSpacing: '0.03em' }}>
+      <div key={d2.drug_id} title={tooltip}
+        style={{ width: 44, height: 44, borderRadius: '6px', background: bg, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '0.6rem', fontWeight: 700, color: '#fff', cursor: 'help', textTransform: 'uppercase', letterSpacing: '0.03em' }}>
         {sev ? sev.slice(0, 4) : '✓'}
       </div>
     );
